@@ -73,7 +73,7 @@ main_menu = ReplyKeyboardMarkup(
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "Привет! Кидай ссылку SoundCloud / VK или жми кнопки 👇",
+        "Привет! Кидай ссылку SoundCloud / VK или просто напиши название трека для поиска 👇",
         reply_markup=main_menu
     )
 
@@ -130,16 +130,15 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await top_artists(update, context)
         return
 
-    # Если ссылка — скачиваем
     if re.match(r'^https?://', text):
         url = text
-        if any(d in url.lower() for d in ['soundcloud.com', 'on.soundcloud.com', 'snd.sc', 'vk.com', 'vk.audio']):
+        if any(d in url.lower() for d in ['soundcloud.com', 'on.soundcloud.com', 'snd.sc', 'vk.com', 'vk.ru', 'vk.audio']):
             await download_track(update, url)
         else:
             await update.message.reply_text("Только SoundCloud и VK пока что")
         return
 
-    # Если не ссылка и не команда — поиск
+    # Поиск по названию
     await search_tracks(update, text)
 
 async def search_tracks(update: Update, query: str):
@@ -223,15 +222,17 @@ async def download_track(update: Update, url: str):
         },
         'noplaylist': True,
         'continuedl': True,
-        'retries': 8,
+        'retries': 10,
         'fragment_retries': 5,
-        'sleep_interval': 0.5,
-        'max_sleep_interval': 3,
-        'cookiefile': 'cookies.txt',
+        'sleep_interval': 1,
+        'max_sleep_interval': 5,
+        'cookiefile': 'cookies.txt' if os.path.exists('cookies.txt') else None,  # куки опциональны
         'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36',
-        'referer': 'https://soundcloud.com/',
+        'referer': 'https://vk.com/' if 'vk' in url.lower() else 'https://soundcloud.com/',
         'no_warnings': True,
         'quiet': True,
+        # Обход для VK без куки (для публичных треков)
+        'extractor_args': {'vk': {'skip': ['auth_check']}} if 'vk' in url.lower() else {},
     }
 
     try:
@@ -303,7 +304,7 @@ async def download_track(update: Update, url: str):
 
     except Exception as e:
         logger.error(f"Ошибка: {str(e)}", exc_info=True)
-        await msg.edit_text("Ошибка при загрузке")
+        await msg.edit_text("Ошибка при загрузке. Попробуй другую ссылку или обнови cookies.txt")
 
 def main():
     app = Application.builder().token(TOKEN).build()
